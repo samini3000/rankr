@@ -26,7 +26,7 @@ internet ──443──▶ host nginx (TLS) ──▶ 127.0.0.1:8088 gateway �
   Postgres, Redis or NATS port is reachable from outside the host.
 - Service configs are the production `config.yml` files baked into the images.
   Stage-specific values (passwords, JWT key, log level, stream size) are
-  environment overrides in `docker-compose.yml`, read from `.env.stage`.
+  environment overrides in `docker-compose.yml`; secrets come from `.env.stage`.
 - Network aliases (`shared-postgres`, `project-app-prod`, ...) match the host
   names in those configs, so no config file is copied for stage.
 
@@ -142,6 +142,33 @@ Stage shares a small host with other projects, so the stack is capped:
 | nats | 384 MB (JetStream: 256 MB memory, 2 GB disk) |
 | each service | 256 MB |
 | gateway | 64 MB |
+
+### NATS stream limits
+
+Limits apply at two levels: the server-wide JetStream budget in `nats.conf`,
+and the per-stream limits each service applies at startup. The server budget
+caps the total; stream limits stop one stream from consuming the whole budget
+and bound retention.
+
+| Limit | Development | Stage | Production |
+|---|---|---|---|
+| JetStream memory budget | unset | 256 MB | unset |
+| JetStream file budget | unset | 2 GB | unset |
+| `EVENTS_STREAM` (file) | 1 GiB, 7d, 1M msgs | 1 GiB, 72h, 1M msgs | 10 GiB, 7d, 1M msgs |
+| `leaderboardscoring_processed_events` (memory) | 1 GiB, 24h, 100k msgs | 128 MiB, 24h, 100k msgs | 1 GiB, 24h, 100k msgs |
+
+Development values come from `deploy/webhook/development/config.yml` and
+`deploy/leaderboardscoring/development/config.yml` (`config.local.yml` uses
+100 MiB and 10k msgs for the scoring stream). Stage values are the production
+configs plus the `WEBHOOK_NATS__STREAM__*` and
+`LEADERBOARDSCORING_NATS_ADAPTER__MAX_BYTES` overrides in
+`deploy/stage/docker-compose.yml`. Keep every file-backed stream below the file
+budget and every memory-backed stream below the memory budget; a stream limit
+above the server budget is ineffective.
+
+Only webhook and leaderboardscoring create NATS streams in Stage. The
+`nats_adapter` blocks in other service configs (including some 10 GiB
+`max_bytes` values) are not read by those services' startup code.
 
 ## Known gaps
 

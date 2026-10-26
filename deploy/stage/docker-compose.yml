@@ -262,6 +262,10 @@ services:
       WEBHOOK_POSTGRES_DB__PASSWORD: ${WEBHOOK_PASS}
       WEBHOOK_REDIS__PASSWORD: ${REDIS_PASSWORD}
       WEBHOOK_LOGGER__LEVEL: info
+      # Raw events are file-backed on a 2 GB JetStream store (TD-31, #280).
+      WEBHOOK_NATS__STREAM__MAX_BYTES: "1073741824"
+      WEBHOOK_NATS__STREAM__MAX_AGE: "72h"
+      WEBHOOK_NATS__STREAM__MAX_MSGS: "1000000"
       # GitHub deliveries carry no bearer token (TD-04, #221).
       WEBHOOK_HTTP_SERVER__PUBLIC_PATHS: /github-webhook/github/process
     healthcheck:

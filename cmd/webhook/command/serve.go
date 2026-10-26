@@ -2,6 +2,8 @@ package command
 
 import (
 	"context"
+	"errors"
+	"fmt"
 	"github.com/ThreeDotsLabs/watermill"
 	"github.com/ThreeDotsLabs/watermill-nats/v2/pkg/nats"
 	"github.com/gocasters/rankr/adapter/redis"
@@ -153,17 +155,9 @@ func serve() {
 			panic(jsErr)
 		}
 
-		_, siErr := js.StreamInfo(cfg.NATSConfig.Stream.Name)
-		if siErr != nil {
-			_, saErr := js.AddStream(&nc.StreamConfig{
-				Name:     cfg.NATSConfig.Stream.Name,
-				Subjects: cfg.NATSConfig.Stream.Subjects, // adjust to your domain naming
-				Storage:  nc.FileStorage,                 // persist on disk
-			})
-			if saErr != nil {
-				lbLogger.Error("Failed to create JetStream stream: ", slog.String("error", saErr.Error()))
-				panic(saErr)
-			}
+		if streamErr := ensureEventStream(js, cfg.NATSConfig.Stream); streamErr != nil {
+			lbLogger.Error("Failed to ensure JetStream stream: ", slog.String("error", streamErr.Error()))
+			panic(streamErr)
 		}
 	}
 
@@ -198,4 +192,41 @@ func serve() {
 
 	app := webhookapp.Setup(cfg, databaseConn, publisher, adapter)
 	app.Start()
+}
+
+type jetStreamManager interface {
+	StreamInfo(stream string, opts ...nc.JSOpt) (*nc.StreamInfo, error)
+	AddStream(cfg *nc.StreamConfig, opts ...nc.JSOpt) (*nc.StreamInfo, error)
+	UpdateStream(cfg *nc.StreamConfig, opts ...nc.JSOpt) (*nc.StreamInfo, error)
+}
+
+func ensureEventStream(js jetStreamManager, cfg webhookapp.NATSStreamConfig) error {
+	streamConfig := &nc.StreamConfig{
+		Name:      cfg.Name,
+		Subjects:  cfg.Subjects,
+		Storage:   nc.FileStorage,
+		Retention: nc.LimitsPolicy,
+		MaxBytes:  cfg.MaxBytes,
+		MaxAge:    cfg.MaxAge,
+		MaxMsgs:   cfg.MaxMsgs,
+	}
+
+	info, err := js.StreamInfo(cfg.Name)
+	if err != nil {
+		if !errors.Is(err, nc.ErrStreamNotFound) {
+			return fmt.Errorf("get stream %q: %w", cfg.Name, err)
+		}
+		if _, err := js.AddStream(streamConfig); err != nil {
+			return fmt.Errorf("create stream %q: %w", cfg.Name, err)
+		}
+		return nil
+	}
+
+	// An existing stream's storage type cannot be changed by UpdateStream.
+	streamConfig.Storage = info.Config.Storage
+	if _, err := js.UpdateStream(streamConfig); err != nil {
+		return fmt.Errorf("update stream %q: %w", cfg.Name, err)
+	}
+
+	return nil
 }

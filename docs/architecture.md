@@ -107,7 +107,8 @@ runtime wiring are not shown as connections.
 
 The stats service also has scheduled refresh work. The flow above reflects
 service responsibilities; it does not imply that stats consumes the raw event
-stream.
+stream. NATS server budgets and per-stream limits are documented in
+[Stage environment](stage.md#nats-stream-limits).
 
 ## Auth flow
 
