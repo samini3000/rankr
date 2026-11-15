@@ -76,10 +76,6 @@ func (s Service) CreateContributor(ctx context.Context, req CreateContributorReq
 		return CreateContributorResponse{}, vErr
 	}
 
-	if req.PrivacyMode == "" {
-		req.PrivacyMode = PrivacyModeReal
-	}
-
 	hashedPassword, err := hashPassword(req.Password)
 	if err != nil {
 		return CreateContributorResponse{}, err

@@ -27,10 +27,9 @@ import (
 // delete its constant together with the knownBug wrapper of its tests. Add a
 // new constant (issue number + short title) for every newly filed bug.
 const (
-	bugEmailWipe          = "#351 (UpdateProfile wipes email)"
-	bugImportValidation   = "#345 (import path validation diverges from API)"
-	bugPlaintextFallback  = "#346 (passwordMatches plaintext fallback)"
-	bugValidationMessages = "#348 (wrong validation messages)"
+	bugEmailWipe         = "#351 (UpdateProfile wipes email)"
+	bugImportValidation  = "#345 (import path validation diverges from API)"
+	bugPlaintextFallback = "#346 (passwordMatches plaintext fallback)"
 )
 
 type bugRecorder struct{ msgs []string }

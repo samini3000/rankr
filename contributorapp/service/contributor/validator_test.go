@@ -193,7 +193,7 @@ func TestValidateCreate_GitHubID(t *testing.T) {
 	}{
 		{"zero means unknown and is accepted", 0, ""},
 		{"1 accepted", 1, ""},
-		// the message text for this case is wrong — see TestKnownBug_ValidationMessages
+		// the message text is covered by TestValidate_MessagesDescribeTheirRule
 		{"negative rejected", -5, "github_id"},
 	}
 
@@ -225,7 +225,7 @@ func TestValidateCreate_OptionalLengths(t *testing.T) {
 		{"display_name 100 accepted", func(r *CreateContributorRequest) {
 			r.DisplayName = strings.Repeat("d", 100)
 		}, ""},
-		// rejected, but with a misleading message — see TestKnownBug_ValidationMessages
+		// rejected; the message text is covered by TestValidate_MessagesDescribeTheirRule
 		{"display_name 101 rejected", func(r *CreateContributorRequest) {
 			r.DisplayName = strings.Repeat("d", 101)
 		}, "display_name"},
@@ -333,6 +333,8 @@ func TestValidateCreate_ErrorMessageConstants(t *testing.T) {
 	assert.Equal(t, "is required", ErrValidationRequired)
 	assert.Equal(t, "must be 'real' or 'anonymous'", ErrValidationEnumPrivacy)
 	assert.Equal(t, "must be between 3 and 100 characters", ErrValidationLength3To100)
+	assert.Equal(t, "must be at most 100 characters", ErrValidationLength0To100)
+	assert.Equal(t, "must be a positive number", ErrValidationPositive)
 	assert.Equal(t, "must be between 6 and 72 characters", ErrValidationLength6To72)
 
 	// and the validator really emits them
@@ -432,11 +434,10 @@ func TestKnownBug_ValidateUpsert_PrivacyMode(t *testing.T) {
 	})
 }
 
-// KNOWN BUG #348 (bugValidationMessages): two validation messages describe the
-// wrong rule — github_id < 1 reports "must be 'public' or 'private'", and a
-// too-long display_name reports "between 3 and 100 characters" although 0..2
-// characters are accepted. Expected: each message describes its own rule.
-func TestKnownBug_ValidationMessages(t *testing.T) {
+// #348: each validation message describes the rule that actually failed —
+// github_id < 1 is a positive-number rule, and display_name accepts 0..100
+// characters, so its message must not claim a minimum of 3.
+func TestValidate_MessagesDescribeTheirRule(t *testing.T) {
 	v := NewValidator()
 	ctx := context.Background()
 
@@ -444,18 +445,15 @@ func TestKnownBug_ValidationMessages(t *testing.T) {
 	negID.GitHubID = -5
 	errID := v.ValidateCreateContributorRequest(ctx, negID)
 	require.Error(t, errID)
+	assert.NotContains(t, errID.Error(), "public",
+		"github_id error must describe the positive-number rule, not a privacy/visibility enum")
 
 	longName := validCreateReq()
 	longName.DisplayName = strings.Repeat("d", 101)
 	errName := v.ValidateCreateContributorRequest(ctx, longName)
 	require.Error(t, errName)
-
-	knownBug(t, bugValidationMessages, func(a *assert.Assertions) {
-		a.NotContains(errID.Error(), "public",
-			"github_id error must describe the positive-number rule, not a privacy/visibility enum")
-		a.NotContains(errName.Error(), "between 3 and",
-			"display_name accepts 0..100 characters; the message must not claim a minimum of 3")
-	})
+	assert.NotContains(t, errName.Error(), "between 3 and",
+		"display_name accepts 0..100 characters; the message must not claim a minimum of 3")
 }
 
 // A13 (P2): UpdateProfileRequest must never grow a password field
